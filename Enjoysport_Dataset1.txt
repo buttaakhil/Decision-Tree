@@ -1,0 +1,110 @@
+import numpy as np
+import pandas as pd
+
+# Importing data without the 'Day' column
+def load_data(path='enjoysport_dataset.csv'):
+    df = pd.read_csv(path, header=0)
+    df = df.drop(columns=['Day']) 
+    print("Dataset Length: ", len(df))
+    print("Dataset Shape: ", df.shape)
+    return df
+
+# Entropy calculation
+def calculate_entropy(df):
+    counts = df.iloc[:, -1].value_counts() 
+    entropy = 0
+    for label in counts.keys():
+        prob = counts[label] / sum(counts)
+        entropy -= prob * np.log2(prob)
+    return entropy
+
+# Information Gain calculation
+def calculate_information_gain(df, feature):
+    initial_entropy = calculate_entropy(df) 
+    unique_values = df[feature].unique() 
+    value_counts = df[feature].value_counts() 
+    subset_entropies = []
+
+    # Calculate entropy for each subset of data corresponding to each value of the feature
+    for value in unique_values:
+        subset = df[df[feature] == value] 
+        subset_entropy = calculate_entropy(subset) 
+        subset_entropies.append(subset_entropy)
+
+    # Calculate weighted average of entropies
+    weighted_entropy = sum((value_counts[value] / len(df)) * subset_entropies[i] for i, value in enumerate(unique_values))
+
+    return initial_entropy - weighted_entropy
+
+# Node class to represent decision nodes
+class TreeNode():
+    def __init__(self, name=None, values=None):
+        self.name = name
+        self.values = values
+
+    def __repr__(self):
+        return self.name
+
+# Function to build decision tree node
+def build_decision_tree_node(df, used_features):
+    node = TreeNode()
+    max_ig = 0
+    best_feature = None
+    remaining_features = [f for f in df.columns[:-1] if f not in used_features]
+
+    if remaining_features:
+        for feature in remaining_features:
+            info_gain = calculate_information_gain(df, feature) 
+            if info_gain > max_ig:
+                max_ig = info_gain
+                best_feature = feature
+
+        if best_feature:
+            used_features.append(best_feature) 
+            node.name = best_feature 
+            node.values = df[best_feature].unique() 
+            return node
+        else:
+            return None
+    else:
+        return None
+
+# Recursive classifier
+def build_decision_tree(df, used_features):
+    if calculate_entropy(df) == 0: 
+        return df.iloc[0, -1]
+
+    root = build_decision_tree_node(df, used_features) 
+
+    if not root:
+        return None
+
+    tree_structure = []
+
+    for value in root.values:
+        subset_df = df[df[root.name] == value] 
+        subtree = build_decision_tree(subset_df, used_features[:]) 
+
+        tree_structure.append((value, subtree))
+
+    return {root.name: tree_structure}
+
+# Load data and build decision tree
+data = load_data() 
+features_used = [] 
+decision_tree = build_decision_tree(data, features_used)
+
+# Convert decision tree format to a single-line output
+def format_tree(tree):
+    if isinstance(tree, dict):
+        formatted_tree = []
+        for key, value in tree.items():
+            for item in value:
+                formatted_tree.append(f"('{item[0]}', {format_tree(item[1])})")
+        return f"{{'{key}': [{', '.join(formatted_tree)}]}}"
+    else:
+        return f"'{tree}'"
+
+formatted_tree = format_tree(decision_tree)
+print("Final Decision Tree Structure: ", formatted_tree)
+
